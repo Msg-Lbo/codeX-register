@@ -96,6 +96,7 @@
   "openai_ssl_verify": true,
   "skip_net_check": false,
   "register_random_fingerprint": true,
+  "register_test_mode_passwordless": false,
 
   "accounts_sync_api_url": "",
   "accounts_sync_bearer_token": "",

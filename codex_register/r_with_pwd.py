@@ -3029,6 +3029,7 @@ def _login_via_password_and_finish_oauth(
     proxies: Any,
     *,
     mark_bad_email_on_invalid_pwd: bool = True,
+    force_passwordless_otp: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     手机号页或无 OAuth 完成时的补救登录。
@@ -3064,8 +3065,15 @@ def _login_via_password_and_finish_oauth(
                 raise RegionBlockedError(msg)
             return None
 
-    def _try_login_via_email_otp_api(referer_hint: str) -> Optional[Dict[str, Any]]:
-        _info("改走验证码登录接口(email-otp)")
+    def _try_login_via_email_otp_api(
+        referer_hint: str,
+        *,
+        prefer_passwordless: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if prefer_passwordless:
+            _info("改走验证码登录接口(passwordless/send-otp)")
+        else:
+            _info("改走验证码登录接口(email-otp)")
         ref = str(referer_hint or "").strip()
         if not ref.startswith("http"):
             ref = "https://auth.openai.com/email-verification"
@@ -3079,46 +3087,74 @@ def _login_via_password_and_finish_oauth(
             x for x in dict.fromkeys([str(v or "").strip() for v in ref_candidates]).keys() if x
         ]
 
-        def _send_login_otp_once() -> Any:
+        endpoint_candidates = [
+            "https://auth.openai.com/api/accounts/passwordless/send-otp",
+            "https://auth.openai.com/api/accounts/email-otp/send",
+        ]
+        if not prefer_passwordless:
+            endpoint_candidates = [
+                "https://auth.openai.com/api/accounts/email-otp/send",
+                "https://auth.openai.com/api/accounts/passwordless/send-otp",
+            ]
+
+        def _send_login_otp_once() -> tuple[Any, str]:
             last_resp = None
+            last_ep = ""
+            endpoint_hint = ""
             for ref_item in dedup_refs:
-                hdrs: Dict[str, str] = {
-                    "referer": ref_item,
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                }
-                st = _build_sentinel_for_session(s, "authorize_continue", proxies)
-                if st:
-                    hdrs["openai-sentinel-token"] = st
-                resp = _post_with_retry(
-                    s,
-                    "https://auth.openai.com/api/accounts/email-otp/send",
-                    headers=hdrs,
-                    json_body={},
-                    proxies=proxies,
-                    timeout=30,
-                    retries=1,
-                )
-                last_resp = resp
-                if resp.status_code == 200:
-                    return resp
-            return last_resp
+                for endpoint in endpoint_candidates:
+                    hdrs: Dict[str, str] = {
+                        "referer": ref_item,
+                        "accept": "application/json",
+                        "content-type": "application/json",
+                    }
+                    st = _build_sentinel_for_session(s, "authorize_continue", proxies)
+                    if st:
+                        hdrs["openai-sentinel-token"] = st
+
+                    if endpoint.endswith("/passwordless/send-otp"):
+                        resp = _post_with_retry(
+                            s,
+                            endpoint,
+                            headers=hdrs,
+                            data="",
+                            proxies=proxies,
+                            timeout=30,
+                            retries=1,
+                        )
+                    else:
+                        resp = _post_with_retry(
+                            s,
+                            endpoint,
+                            headers=hdrs,
+                            json_body={},
+                            proxies=proxies,
+                            timeout=30,
+                            retries=1,
+                        )
+
+                    last_resp = resp
+                    last_ep = endpoint
+                    endpoint_hint = endpoint.rsplit("/", 1)[-1]
+                    if resp.status_code == 200:
+                        return resp, endpoint_hint
+            return last_resp, endpoint_hint or (last_ep.rsplit("/", 1)[-1] if last_ep else "send-otp")
 
         try:
-            otp_send_resp = _send_login_otp_once()
+            otp_send_resp, otp_endpoint = _send_login_otp_once()
         except UserStoppedError:
             raise
         except Exception as e:
             _warn(f"验证码登录 OTP 发送请求异常: {e}")
             return None
-        _info(f"验证码登录 OTP 发送 HTTP {otp_send_resp.status_code}")
+        _info(f"验证码登录 OTP 发送 HTTP {otp_send_resp.status_code} ({otp_endpoint})")
         if otp_send_resp.status_code != 200:
             _warn(f"验证码登录 OTP 发送失败: {otp_send_resp.text[:300]}")
             return None
 
         def _resend_login_otp_once() -> bool:
-            resend_resp = _send_login_otp_once()
-            _info(f"验证码登录 OTP 重发 HTTP {resend_resp.status_code}")
+            resend_resp, resend_ep = _send_login_otp_once()
+            _info(f"验证码登录 OTP 重发 HTTP {resend_resp.status_code} ({resend_ep})")
             if resend_resp.status_code != 200:
                 _warn(f"验证码登录 OTP 重发异常: {resend_resp.text[:300]}")
             return resend_resp.status_code == 200
@@ -3252,6 +3288,17 @@ def _login_via_password_and_finish_oauth(
         raise
     except Exception as e:
         _warn(f"GET 密码页失败，仍尝试提交密码: {e}")
+
+    if force_passwordless_otp:
+        _info("测试模式：跳过 password/verify，直接使用一次性验证码登录")
+        otp_login_account = _try_login_via_email_otp_api(
+            current_url,
+            prefer_passwordless=True,
+        )
+        if otp_login_account:
+            return otp_login_account
+        _err("测试模式一次性验证码登录失败")
+        return None
 
     _PWD_REFERS = (
         current_url,
@@ -3574,6 +3621,12 @@ def run(proxy: Optional[str]):
         f" · imp={fp.get('impersonate', '-')}"
         f" · lang={fp.get('accept_language', '-')}"
     )
+    test_mode_passwordless = _env_bool("REGISTER_TEST_MODE_PASSWORDLESS", False) or _env_bool(
+        "OPENAI_TEST_MODE",
+        False,
+    )
+    if test_mode_passwordless:
+        _info("测试模式已开启：注册成功后将执行一次性验证码登录链路")
 
     def _runtime_meta() -> Dict[str, Any]:
         out: Dict[str, Any] = {}
@@ -4010,6 +4063,52 @@ def run(proxy: Optional[str]):
         except Exception:
             create_continue = ""
             create_page = ""
+
+        if test_mode_passwordless:
+            _info("测试模式：尝试一次性验证码登录并完成 OAuth")
+            try:
+                test_account = _login_via_password_and_finish_oauth(
+                    email,
+                    password,
+                    dev_token,
+                    proxies,
+                    mark_bad_email_on_invalid_pwd=False,
+                    force_passwordless_otp=True,
+                )
+            except HeroSmsBalanceLowError as e:
+                return _fail(
+                    password,
+                    "phone_balance_insufficient",
+                    str(e or "HeroSMS 余额不足")[:220],
+                )
+            except RegionBlockedError as e:
+                return _fail(
+                    password,
+                    "region_blocked",
+                    str(e or "区域不可用")[:220],
+                )
+            except HeroSmsCountryBlockedError as e:
+                return _fail(
+                    password,
+                    "phone_country_blocked",
+                    str(e or "国家受限")[:220],
+                )
+            except HeroSmsCodeTimeoutError as e:
+                return _fail(
+                    password,
+                    "phone_sms_timeout",
+                    str(e or "接码超时")[:220],
+                )
+
+            if test_account:
+                _mark_graph_bad_email(email, "注册成功后已消费")
+                return _ok(test_account, password)
+            _err("测试模式一次性验证码链路未成功")
+            return _fail(
+                password,
+                "test_mode_passwordless_failed",
+                "测试模式一次性验证码登录失败",
+            )
 
         if _is_add_phone_page(create_page) or _is_add_phone_url(create_continue):
             _info("进入手机号页：优先尝试 HeroSMS 手机验证")

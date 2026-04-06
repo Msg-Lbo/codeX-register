@@ -1041,6 +1041,9 @@
                         <n-form-item label="随机浏览器指纹">
                           <n-switch v-model:value="settingsForm.register_random_fingerprint" />
                         </n-form-item>
+                        <n-form-item label="测试模式(一次性验证码登录)">
+                          <n-switch v-model:value="settingsForm.register_test_mode_passwordless" />
+                        </n-form-item>
                       </n-form>
 
                       <n-form class="settings-col" label-placement="left" label-width="180" :model="settingsForm">

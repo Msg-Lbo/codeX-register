@@ -947,6 +947,7 @@ class RegisterService:
             "phone_sms_timeout": "手机号验证码超时(HeroSMS)",
             "registration_disallowed": "registration_disallowed 风控",
             "graph_pool_exhausted": "Microsoft 邮箱账号池已耗尽",
+            "test_mode_passwordless_failed": "测试模式一次性验证码链路失败",
             "tls_error": "SSL/TLS 异常",
             "runtime_exception": "运行异常",
         }
@@ -1579,6 +1580,11 @@ class RegisterService:
                 data.get("register_random_fingerprint"),
                 bool(cfg.get("register_random_fingerprint", True)),
             )
+        if "register_test_mode_passwordless" in data:
+            cfg["register_test_mode_passwordless"] = self._to_bool(
+                data.get("register_test_mode_passwordless"),
+                bool(cfg.get("register_test_mode_passwordless", False)),
+            )
         if "mail_domain_allowlist" in data:
             cfg["mail_domain_allowlist"] = self._normalize_domain_list(
                 data.get("mail_domain_allowlist")
@@ -1849,6 +1855,10 @@ class RegisterService:
         os.environ["SKIP_NET_CHECK"] = "1" if self.cfg.get("skip_net_check") else "0"
         os.environ["MAILFREE_RANDOM_DOMAIN"] = "1" if self.cfg.get("mailfree_random_domain", True) else "0"
         os.environ["REGISTER_RANDOM_FINGERPRINT"] = "1" if self.cfg.get("register_random_fingerprint", True) else "0"
+        os.environ["REGISTER_TEST_MODE_PASSWORDLESS"] = (
+            "1" if self.cfg.get("register_test_mode_passwordless", False) else "0"
+        )
+        os.environ["OPENAI_TEST_MODE"] = os.environ["REGISTER_TEST_MODE_PASSWORDLESS"]
         mailbox_custom_enabled = bool(self.cfg.get("mailbox_custom_enabled", False))
         os.environ["MAILBOX_CUSTOM_ENABLED"] = "1" if mailbox_custom_enabled else "0"
         os.environ["MAILBOX_PREFIX"] = (

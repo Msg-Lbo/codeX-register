@@ -154,6 +154,7 @@
           mailbox_prefix: "",
           mailbox_random_len: 0,
           register_random_fingerprint: true,
+          register_test_mode_passwordless: false,
           openai_ssl_verify: true,
           skip_net_check: false,
           flclash_enable_switch: false,
@@ -1599,6 +1600,7 @@
           settingsForm.mailbox_prefix = String(cfg.mailbox_prefix || "");
           settingsForm.mailbox_random_len = Number(cfg.mailbox_random_len || 0);
           settingsForm.register_random_fingerprint = cfg.register_random_fingerprint !== false;
+          settingsForm.register_test_mode_passwordless = !!cfg.register_test_mode_passwordless;
           settingsForm.openai_ssl_verify = !!cfg.openai_ssl_verify;
           settingsForm.skip_net_check = !!cfg.skip_net_check;
           settingsForm.flclash_enable_switch = !!cfg.flclash_enable_switch;
@@ -1694,6 +1696,7 @@
             mailbox_prefix: String(settingsForm.mailbox_prefix || "").trim(),
             mailbox_random_len: Number(settingsForm.mailbox_random_len || 0),
             register_random_fingerprint: !!settingsForm.register_random_fingerprint,
+            register_test_mode_passwordless: !!settingsForm.register_test_mode_passwordless,
             openai_ssl_verify: !!settingsForm.openai_ssl_verify,
             skip_net_check: !!settingsForm.skip_net_check,
             flclash_enable_switch: !!settingsForm.flclash_enable_switch,

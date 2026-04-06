@@ -172,6 +172,7 @@ Cloudflare Token 要求（用于域名配置页读取 Zone 和管理 CNAME）：
 | `retry_403_wait_sec` | int | `10` | 命中 403 的等待秒数 |
 | `proxy` | string | `""` | 代理地址；支持多条轮换 |
 | `register_random_fingerprint` | bool | `true` | 是否随机浏览器指纹 |
+| `register_test_mode_passwordless` | bool | `false` | 测试模式：注册成功后走一次性验证码登录链路 |
 | `openai_ssl_verify` | bool | `true` | HTTPS 证书校验 |
 | `skip_net_check` | bool | `false` | 跳过出口地区检测 |
 

@@ -98,6 +98,7 @@ DEFAULT_CONFIG = {
     "local_cpa_test_state": {},
     "mailfree_random_domain": True,
     "register_random_fingerprint": True,
+    "register_test_mode_passwordless": False,
     "openai_ssl_verify": True,
     "skip_net_check": False,
     "accounts_sync_api_url": "",
@@ -235,6 +236,11 @@ def load_config() -> dict[str, Any]:
         cfg["skip_net_check"] = skip_v in ("1", "true", "yes")
         fp_v = env.get("REGISTER_RANDOM_FINGERPRINT", "1").strip().lower()
         cfg["register_random_fingerprint"] = fp_v not in ("0", "false", "no")
+        test_mode_v = env.get(
+            "REGISTER_TEST_MODE_PASSWORDLESS",
+            env.get("OPENAI_TEST_MODE", "0"),
+        ).strip().lower()
+        cfg["register_test_mode_passwordless"] = test_mode_v in ("1", "true", "yes", "on")
         save_config(cfg)
     return cfg
 
